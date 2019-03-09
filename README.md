@@ -1,2 +1,2 @@
-### tf-keras
-Translation of AGCN implemented with tf to an implementation with tf.keras.
+### tf.keras_GCN
+GCN implemented with tf.keras.
