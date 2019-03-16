@@ -86,25 +86,27 @@ class mymodel(tf.keras.Model):
     """
     A generallized model for the prediction of properties from graph
     """
-    def __init__(self):
-        super(mymodel, self).__init__(name='')
-        self.gcn1 = GCN(32) #, input_shape=[58])
-        self.gcn2 = GCN(32) #, input_shape=[58])
-        self.gcn3 = GCN(32) #, input_shape=[58])
-        self.g2n = G2N(128)#, input_shape=[58])
-        self.dense1 = layers.Dense(128, activation=tf.nn.relu, input_shape=[128])
-        self.dense2 = layers.Dense(128, activation=tf.nn.tanh, input_shape=[128])
-        self.dense3 = layers.Dense(1)
+    def __init__(self, model_name='GCN', graph_layers=[32, 32], mlp_layers=[128, 128], **kwargs):
+        super(mymodel, self).__init__(**kwargs)
+        self.model_name = model_name
+        self.graph_layers = []
+        self.mlp_layers = []
+        if model_name == 'GCN':
+            for hid in graph_layers:
+                self.graph_layers.append(GCN(hid)) 
+        self.g2n = G2N(graph_layers[-1])
+        for mlp in mlp_layers:
+            self.mlp_layers.append(layers.Dense(128, activation=tf.nn.relu, input_shape=[mlp]))
+        self.mlp_layers.append(layers.Dense(1))
 
     def call(self, input):
-        X, A = input[0], input[1]
-        x = tf.nn.relu(self.gcn1([X, A]))
-        x = tf.nn.relu(self.gcn2([x, A]))
-        x = tf.nn.relu(self.gcn3([x, A]))
+        x, A = input[0], input[1]
+        for model in self.graph_layers:
+            x = tf.nn.relu(model([x, A]))
         x = tf.nn.relu(self.g2n(x))
-        x = self.dense1(x)
-        x = self.dense2(x)
-        return self.dense3(x)
+        for model in self.mlp_layers:
+            x = model(x)
+        return x
 
 def get_skip_connection(_X, X):
     if( int(_X.get_shape()[2]) != int(X.get_shape()[2]) ):
@@ -115,7 +117,7 @@ def get_skip_connection(_X, X):
 
     return _X 
 
-def load_data(id1, id2):
+def load_data(id1, id2, unit=10000):
     """
     load the source data from somewhere
     """
@@ -128,7 +130,7 @@ def load_data(id1, id2):
         features = np.concatenate((features, fea0), axis=0) 
         adj = np.concatenate((adj, adj0), axis=0)
     N_sample = len(features)
-    prop = np.load('../../augmented-GCN/database/ZINC/logP.npy')[id1*10000:N_sample]
+    prop = np.load('../../augmented-GCN/database/ZINC/logP.npy')[id1*unit:id2*unit]
     return adj, features, prop
 
 class Progress(keras.callbacks.Callback):
@@ -141,12 +143,12 @@ class Progress(keras.callbacks.Callback):
 
 
 #load data
-adj1, features1, props1 = load_data(0, 45)
-adj2, features2, props2 = load_data(45, 50)
+adj1, features1, props1 = load_data(0, 40)
+adj2, features2, props2 = load_data(40,49)
 
 #Define the model
 lr = 1e-3
-model = mymodel()
+model = mymodel(model_name='GCN', graph_layers=[32, 32], mlp_layers=[128, 128])
 #optimizer = tf.keras.optimizers.RMSprop(0.001)
 optimizer = tf.keras.optimizers.Adam(lr=lr, decay=1e-6)
 model.compile(loss='mean_squared_error',
@@ -160,10 +162,18 @@ history = model.fit(x=[features1, adj1], y=props1, batch_size=100,
 #history1 = model.evaluate(x=[features2, adj2], y=props2, batch_size=100)
 
 #Analyze the results
+res1 = model.predict([features1,adj1])
+res2 = model.predict([features2,adj2])
+res = np.append(res1, res2).flatten()
+props = np.append(props1, props2).flatten()
+print('r2 in train: ', r2_score(res1, props1))
+print('r2 in test: ', r2_score(res2, props2))
+
 hist = pd.DataFrame(history.history)
 hist['epoch'] = history.epoch
-plt.figure()
+plt.figure(figsize=(10, 8))
 plt.subplot(211)
+plt.title(model.model_name+'-'+str(len(model.graph_layers))+'-'+str(len(model.mlp_layers)))
 plt.xlabel('Epoch')
 plt.ylabel('Mean Abs Error')
 plt.plot(hist['epoch'], hist['mean_absolute_error'],
@@ -173,23 +183,20 @@ plt.plot(hist['epoch'], hist['mean_absolute_error'],
 plt.legend()
 
 plt.subplot(212)
-res1 = model.predict([features1,adj1])
-res2 = model.predict([features2,adj2])
-res = np.append(res1, res2).flatten()
-props = np.append(props1, props2).flatten()
-print('r2: ', r2_score(res1, props1))
-print('r2: ', r2_score(res2, props2))
-r2 = 'r2: {:.4f} '.format(r2_score(res, props))
-mae = 'mae: {:.3f}'.format(mean_absolute_error(res, props))
-plt.scatter(props1, res1, label='Train')
-plt.scatter(props2, res2, label='Test')
+
+label1 = 'Train: r2: {:.4f} mae: {:.4f} in {:d}'.format(r2_score(res1, props1), 
+                                         mean_absolute_error(res1, props1),
+                                                              len(props1))
+label2 = 'test:  r2: {:.4f} mae: {:.4f} in {:d}'.format(r2_score(res2, props2), 
+                                         mean_absolute_error(res2, props2),
+                                                              len(props2))
+plt.scatter(props1, res1, label=label1)
+plt.scatter(props2, res2, label=label2)
 plt.legend()
-plt.title(r2+mae)
 plt.xlabel('True values')
 plt.ylabel('Predictions')
 plt.savefig('res.png')
 
-print(r2+mae)
 print(model.summary())
 
 # Recreate the exact same model, including weights and optimizer.
