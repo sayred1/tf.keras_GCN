@@ -50,11 +50,12 @@ class GraphConvolution(Module):
                + str(self.out_features) + ')'
 
 class GCN(nn.Module): # called from train.py then calls GraphConvolution
-    def __init__(self, nfeas, nhids):
+    def __init__(self, dropout, nfeas, nhids):
         super(GCN, self).__init__()
         self.gc1 = GraphConvolution(nfeas[0], nhids[0]) #this needs to be propogated forward, but it isnt.
         self.gc2 = GraphConvolution(nhids[0], nhids[1])
         self.gc3 = GraphConvolution(nhids[1], nhids[1])
+        #self.dropout = dropout
         #self.gc3 = GraphConvolution(nhids[1], 1)
         # we have three conv. layers above which need to be activated
 
@@ -70,7 +71,9 @@ class GCN(nn.Module): # called from train.py then calls GraphConvolution
 
     def forward(self, x, adj):
         gconv1 = F.relu(self.gc1(x, adj)) # input
+        #gconv1 = F.dropout(gconv1, self.dropout)
         gconv2 = F.relu(self.gc2(gconv1, adj)) # 32
+        #gconv2 = F.dropout(gconv2, self.dropout)
         gconv3 = F.relu(self.gc3(gconv2, adj))
         #gconv3 = gconv3.view(gconv3.shape[0], gconv3.shape[1])
         gconv3 = mechs.gg(gconv3,gconv1,512)

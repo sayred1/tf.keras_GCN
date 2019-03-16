@@ -14,7 +14,7 @@ from models import GCN
 
 import torch.optim.lr_scheduler
 
-def load_data(path="../data/", ids=1000):
+def load_data(path="/Users/b_eebs/tf-keras/data/", ids=10000):
     print('Loading {} dataset...'.format(path))
     features = np.load(path+'fea.npy')[:ids]
     adj = np.load(path+'adj.npy')[:ids]
@@ -31,7 +31,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--seed', type=int, default=42, help='Random seed.')
 parser.add_argument('--epochs', type=int, default=100,
                     help='Number of epochs to train.')
-parser.add_argument('--lr', type=float, default=1e-2,
+parser.add_argument('--lr', type=float, default=0.01,
                     help='Initial learning rate.')
 parser.add_argument('--weight_decay', type=float, default=0.95,
                     help='Weight decay (L2 loss on parameters).')
@@ -39,7 +39,7 @@ parser.add_argument('--weight_decay', type=float, default=0.95,
 args = parser.parse_args()
 
 np.random.seed(args.seed)
-torch.manual_seed(args.seed)p
+torch.manual_seed(args.seed)
 
 # Load data
 # take this, and train it over batches of 1000 with batch_size
@@ -51,8 +51,10 @@ adj, features, props = load_data()
 # over mini batches of batch size 100 w/ 100 molecules in each, atomwise is still giving
 # me issuse, graph gatherer is all that works for me, in models.py i've set the reset_parameters
 # method as the location where I assign an xavier initializer to the weight and bias
+# dropout doesn't fix the problem. also reshaped the bias earlier.
 
-model = GCN(nfeas = [features.shape[2], features.shape[1]],
+dropout = 0.5
+model = GCN(dropout, nfeas = [features.shape[2], features.shape[1]],
             nhids=[32, 32, 512, 512, 512, 1]) # this is two conv layers
 
 def train(num_epochs,num_files,num_batches,batch_size,lr):
@@ -62,7 +64,6 @@ def train(num_epochs,num_files,num_batches,batch_size,lr):
     for epoch in range(num_epochs):
         lr = lr * (0.95 ** epoch) # learning rate decay
         optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay = 0.95)
-
         model.train()
         for file in range(num_files):
             for _iter in range(num_batches):
@@ -75,20 +76,20 @@ def train(num_epochs,num_files,num_batches,batch_size,lr):
                 (_iter+1)*batch_size])
                 props_batch = (props[_iter*batch_size:
                 (_iter+1)*batch_size])
-                props_batch = props_batch.reshape(batch_size,1)
+                props_batch = props_batch.reshape(batch_size,1) # reshaped this
                 # optimization
+                optimizer.zero_grad()
                 output = model(feature_batch, adj_batch)
                 loss_mse = loss_fn(output,props_batch) # the loss is being calculated
-                # correctly based off of the below evaluation.
+                # correct based off of the below evaluation.
                 mean = torch.mean((output-props_batch)**2) # same as above
                 #print('total_iter ', total_iter, 'loss: ',loss_mse)
-                optimizer.zero_grad()
                 loss_mse.backward()
                 optimizer.step()
                 # print out mae and mse every batch (every 100 iterations)
                 if total_iter % 100 == 0:
                     mae = F.l1_loss(output, props_batch)
-                    mse = F.mse_loss(output, props_batch)
+``                    mse = F.mse_loss(output, props_batch)
                     print('batch', total_iter//100, 'complete  mae =',mae, 'mse =',mse)
 
 #def test():
