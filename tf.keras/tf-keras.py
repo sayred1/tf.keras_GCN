@@ -148,7 +148,7 @@ adj2, features2, props2 = load_data(40,49)
 
 #Define the model
 lr = 1e-3
-model = mymodel(model_name='GCN', graph_layers=[32, 32], mlp_layers=[128, 128])
+model = mymodel(model_name='GCN', graph_layers=[32, 32], mlp_layers=[128, 64])
 #optimizer = tf.keras.optimizers.RMSprop(0.001)
 optimizer = tf.keras.optimizers.Adam(lr=lr, decay=1e-6)
 model.compile(loss='mean_squared_error',
@@ -164,8 +164,6 @@ history = model.fit(x=[features1, adj1], y=props1, batch_size=100,
 #Analyze the results
 res1 = model.predict([features1,adj1])
 res2 = model.predict([features2,adj2])
-res = np.append(res1, res2).flatten()
-props = np.append(props1, props2).flatten()
 print('r2 in train: ', r2_score(res1, props1))
 print('r2 in test: ', r2_score(res2, props2))
 
