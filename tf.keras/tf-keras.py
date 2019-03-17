@@ -176,12 +176,12 @@ if __name__ == '__main__':
     title += '+Graph' 
     for i, lay in enumerate(graph_layers):
         title += str(lay)
-        if i-1 < len(graph_layers):
+        if i+1 < len(graph_layers):
             title += '-'
     title += '+MLP'
     for i, lay in enumerate(mlp_layers):
         title += str(lay)
-        if i-1 < len(mlp_layers):
+        if i+1 < len(mlp_layers):
             title += '-'
     logging.info('The input model is {:s}'.format(title))
     time0 = time()
