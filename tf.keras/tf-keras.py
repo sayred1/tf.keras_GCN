@@ -202,7 +202,7 @@ if __name__ == '__main__':
                         epochs=epoch, verbose=0,
                         callbacks=[Progress()]
                        )
-    logging.info('Training is completed in {:2f} minutes'.format((time()-time0)/60))
+    logging.info('Training is completed in {:.2f} minutes'.format((time()-time0)/60))
     
     # Analyze the results
     res1 = model.predict([features1,adj1])
