@@ -79,7 +79,7 @@ INFO:root:Train in 10000 samples, r2 0.9678 mae 0.1903
 INFO:root:Test  in 10000 samples, r2 0.9558 mae 0.2123
 ```
 and a figure showing the evolution/performance of training 
-![plots](https://github.com/sayred1/tf.keras_GCN/blob/master/tf.keras_GCN/imgs/GCN-epoch100+Graph32-32-32+MLP128-128.png)
+![plots](https://github.com/sayred1/tf.keras_GCN/blob/master/tf.keras/imgs/GCN-epoch100%2BGraph32-32-32%2BMLP128-128.png)
 
 ## Tensorboard 
 It is generally good to visuallize the results via powerful tensorboard. To do so, one can just use the following callback function to save the results to tensorboard in `model.fit()`
