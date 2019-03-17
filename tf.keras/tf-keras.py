@@ -191,6 +191,13 @@ if __name__ == '__main__':
     model.compile(loss='mean_squared_error',
                   optimizer=optimizer,
                   metrics=['mean_absolute_error'])
+
+    # callback function to save the results to tensorboard
+    #tbCallBack = keras.callbacks.TensorBoard(log_dir='./Graph', 
+    #                                         histogram_freq=10, 
+    #                                         write_graph=True, 
+    #                                         write_images=True)
+
     history = model.fit(x=[features1, adj1], y=props1, batch_size=100, 
                         epochs=epoch, verbose=0,
                         callbacks=[Progress()]
