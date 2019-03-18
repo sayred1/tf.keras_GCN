@@ -12,7 +12,7 @@ from time import time
 import sys
 K.set_floatx('float64')
 logging.basicConfig(filename='test.log', level=logging.INFO)
-
+## needs to be commented
 class GCN(layers.Layer):
     """
     A graph convolution model
