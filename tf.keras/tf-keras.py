@@ -151,19 +151,19 @@ if __name__ == '__main__':
     parser = OptionParser()
     parser.add_option("-m", "--model", dest="model", default='GCN',
                       help="training model, GCN(default)")
-    parser.add_option("-g", "--graph", dest="graph", default=[32, 32, 32], type=int,
-                      help="graph_layers in list, [32, 32, 32](default)")
-    parser.add_option("-l", "--mlp", dest="mlp", default=[128, 128], type=int,
-                      help="mlp layers in list, [128, 128](default)")
+    parser.add_option("-g", "--graph", dest="graph", default='32, 32, 32', #nargs='+', type=int,
+                      help="graph_layers in list, 32, 32, 32(default)")
+    parser.add_option("-l", "--mlp", dest="mlp", default='128, 128', #nargs='+', type=int, 
+                      help="mlp layers in list, 128, 128(default)")
     parser.add_option("-e", "--epoch", dest="epoch", default=100, type=int,
-                      help="number of epochs, 100 (default)")
+                      help="number of epochs, 200 (default)")
     (options, args) = parser.parse_args()
 
     # Define the adjustable parameters
     train, test = [0, 1], [1, 2]
     model_name = options.model
-    graph_layers = options.graph
-    mlp_layers = options.mlp
+    graph_layers = [int(item) for item in options.graph.split(',')]
+    mlp_layers = [int(item) for item in options.mlp.split(',')]
     epoch = options.epoch
     lr = 1e-3
     
@@ -203,6 +203,7 @@ if __name__ == '__main__':
                         callbacks=[Progress()]
                        )
     logging.info('Training is completed in {:.2f} minutes'.format((time()-time0)/60))
+    logging.info('Total number of parameters: {:d}'.format(history.model.count_params()))
     
     # Analyze the results
     res1 = model.predict([features1,adj1])
@@ -235,6 +236,7 @@ if __name__ == '__main__':
     plt.xlabel('True values')
     plt.ylabel('Predictions')
     plt.savefig(title+'.png')
+    np.savetxt(title+'.txt', hist['mean_absolute_error'])
     print(history.model.summary())
     
     # Recreate the exact same model, including weights and optimizer.
