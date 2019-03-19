@@ -17,10 +17,10 @@ class GCN(layers.Layer):
     """
     A graph convolution model
     """
-    def __init__(self, model_name, output_dim, activation, **kwargs):
+    def __init__(self, model_name, output_dim, activation, **kwargs): 
         self.output_dim = output_dim
         self.activation = activation
-        self.model_name = model_name
+        self.model_name = model_name # added model name as a parameter
         super(GCN, self).__init__(**kwargs)
 
     def build(self, input_shape):
@@ -28,7 +28,15 @@ class GCN(layers.Layer):
         shape = tf.TensorShape((input_shape[0][2], self.output_dim))
         shape = [int(shape[0]),int(shape[1])] # [50 , 32]
 
-        if model_name == 'GCN' or model_name == 'GCN-g':
+       """
+       GCN & GCN-gate take the same convolutional weights, GCN-gate includes gated-skip connection bias: self.gate_bias
+       
+       GCN-att. & Augmented GCN (GCN-att.-gate) both calculate conv. weight, conv. bias, and attn. weight in K = 4 subspace,
+       Augmented GCN includes gated-skip connection bias: self.gate_bias
+       """       
+    
+        # GCN or GCN-gate weight and bias
+        if model_name == 'GCN' or model_name == 'GCN-g': 
             self.kernel = self.add_weight(name='kernel',
                                           shape=shape,
                                           initializer='glorot_uniform',
@@ -38,14 +46,16 @@ class GCN(layers.Layer):
                                         shape=[shape[1]],
                                         initializer='glorot_uniform',
                                         trainable=True)
-            if model_name == 'GCN-g':
+            if model_name == 'GCN-g':                                   # if GCN-gate, add gate bias
                 self.gate_bias = self.add_weight(name = 'gate_bias',
                                            shape = [shape[1]], initializer='glorot_uniform',
-                                           dtype=tf.float64)
+                                                 dtype=tf.float64)
+        # GCN - att. or GCN - att. - gate
         else:
+            # att. weight, conv. weight, and conv. bias calculated in K = 4 subspaces
             self.conv_weight = []
             self.conv_bias = []
-            self.attn_weight = []
+            self.attn_weight = [] 
             for i in range(4):
                 self.attn_kernel = self.add_weight(name='attn-kernel'+str(i),
                                               shape=[shape[1],shape[1]],
@@ -65,7 +75,7 @@ class GCN(layers.Layer):
                                             trainable=True)
                 self.conv_bias.append(self.bias)
 
-            if model_name == 'GCN-ag':
+            if model_name == 'GCN-ag':                                  # if GCN - att. - gate, add gate bias
                 self.gate_bias = self.add_weight(name = 'gate_bias',
                                                  shape = [shape[1]],
                                                  initializer='glorot_uniform',
@@ -75,44 +85,46 @@ class GCN(layers.Layer):
         X, A = input[0], input[1]
         dim = self.kernel.get_shape()[1]
         num_atoms = A.get_shape()[1]
-        if model_name == 'GCN' or model_name == 'GCN-g':
+        
+        # need to save and return the coefficiants if needed
+        if model_name == 'GCN' or model_name == 'GCN-g':            # GCN or GCN-gate weight and bias
             _b = tf.reshape(tf.tile(self.bias, [num_atoms]), [num_atoms, dim])
             _X = tf.einsum('ijk,kl->ijl', X, self.kernel) + _b
             _X = tf.matmul(A, _X)
-            if model_name == 'GCN': # gcn only
-                X = get_skip_connection(_X, X)
+            
+            if model_name == 'GCN': # GCN only
+                X = get_skip_connection(_X, X)                      # basic skip-connection
                 return self.activation(_X)
-            # need to label attentions
-            # need to save and return the coefficiants
-            else: # gcn + gate
+            
+            else: # GCN-gate
                 _X = self.activation(_X)
                 if( int(X.get_shape()[2]) != dim ):
                     X = tf.layers.dense(X, dim, use_bias=False)
-                coeff = get_gate_coeff(_X,X,dim,self.gate_bias)
+                coeff = get_gate_coeff(_X,X,dim,self.gate_bias)     # gate coefficient (determines if _X is updated from recent layers)
                 _X = tf.multiply(_X,coeff) + tf.multiply(X,1.0-coeff)
                 return self.activation(_X)
 
-        # need to save and return attentions and coeff
-        elif model_name == 'GCN-a' or model_name == 'GCN-ag':
-            X_total = []
+        # need to save and return attentions and coeff if needed
+        elif model_name == 'GCN-a' or model_name == 'GCN-ag':       # GCN - att. or GCN - att. - gate
+            X_total = [] 
             A_total = []
-            for i in range(len(self.conv_weight)):
+            for i in range(len(self.conv_weight)):                  # _X and A (attention coeff.) calculed in K = 4 subspaces  
                 _b = tf.reshape(tf.tile(self.conv_bias[i], [num_atoms]), [num_atoms, dim])
                 _h = tf.einsum('ijk,kl->ijl', X, self.conv_weight[i]) + _b
-                _A = attn_matrix(A, _h, self.attn_weight[i])
+                _A = attn_matrix(A, _h, self.attn_weight[i])        # calculates the attention coefficient (changes weights between atoms)
                 _h = tf.nn.relu(tf.matmul(_A, _h))
                 X_total.append(_h)
                 A_total.append(_A)
-            _X = tf.nn.relu(tf.reduce_mean(X_total, 0))
-            _A = tf.reduce_mean(A_total, 0)
-            if model_name == 'GCN-a':  # gcn + att
-                _X = get_skip_connection(_X, X)
+            _X = tf.nn.relu(tf.reduce_mean(X_total, 0))             # activation of the mean of K = 4 updated feature calculations
+            _A = tf.reduce_mean(A_total, 0)                         # mean of K = 4 attention coefficients
+            if model_name == 'GCN-a':  # GCN - att.
+                _X = get_skip_connection(_X, X)                     # basic skip-connection
                 return self.activation(_X)
-            else: # gcn + att + gate
+            else:                                                   # GCN - att. - gate
                 if( int(X.get_shape()[2]) != dim ):
                     X = tf.layers.dense(X, dim, use_bias=False)
-                coeff = get_gate_coeff(_X,X,dim,self.gate_bias)
-                _X = tf.multiply(_X, coeff) + tf.multiply(X,1.0-coeff)
+                coeff = get_gate_coeff(_X,X,dim,self.gate_bias)     # gate coefficient (determines if _X is updated from recent layers)
+                _X = tf.multiply(_X, coeff) + tf.multiply(X,1.0-coeff)  
                 return self.activation(_X)
 
 class G2N(layers.Layer):
@@ -157,15 +169,18 @@ class mymodel(tf.keras.Model):
     """
     def __init__(self, model_name, graph_layers=[32, 32], mlp_layers=[128, 128], **kwargs):
         super(mymodel, self).__init__(**kwargs)
-        self.model_name = model_name
+        self.model_name = model_name 
         self.graph_layers = []
         self.mlp_layers = []
         self.gates = []
         self.attention = []
-        # still need to add other outputs: gates and attention
+        # currently not returning the gates and attention, if needed, will include.
+        # only need one for statement without saving gates and attention
+        # following for loop the same for all models
         for i, hid in enumerate(graph_layers):
-            self.graph_layers.append(GCN(model_name, hid, name=str(model_name)+str(i), activation=tf.nn.relu))
-        # MLP process
+            self.graph_layers.append(GCN(model_name, hid, name=str(model_name)+str(i), activation=tf.nn.relu)) # added model_name as argument
+        
+        # MLP process same for all models
         self.g2n = G2N(graph_layers[-1], name='Readout')
         for i, mlp in enumerate(mlp_layers):
             self.mlp_layers.append(layers.Dense(mlp, name='MLP'+str(i), activation=tf.nn.relu))
@@ -239,10 +254,10 @@ class Progress(keras.callbacks.Callback):
 
 if __name__ == '__main__':
     # ------------------------ Options -------------------------------------
-    # ex: python tf-keras.py GCN
+    # GCN: Graph conv, GCN-a: Graph conv. + attention, GCN-g: Graph conv. + gate, GCN-ag: Graph conv. + attention + gate
     parser = OptionParser()
     parser.add_option("-m", "--model", dest="model", default='GCN',
-                      help="training model, GCN(default)")
+                      help="training model, GCN(default), GCN-a, GCN-g, GCN-ag")
     parser.add_option("-g", "--graph", dest="graph", default='32, 32, 32', #nargs='+', type=int,
                       help="graph_layers in list, 32, 32, 32(default)")
     parser.add_option("-l", "--mlp", dest="mlp", default='128, 128', #nargs='+', type=int,
